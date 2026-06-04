@@ -74,7 +74,6 @@
   }
   .top3 li .rank { font-weight: 700; color: #bbb; width: 1.2em; }
   .top3 li .name { flex: 1; }
-  .top3 li .conf { color: #aaa; font-size: 0.8rem; }
   .top3 li.is-cat { background: #eafaf0; box-shadow: 0 1px 4px rgba(46,204,113,0.25); }
   .top3 li.is-cat .rank, .top3 li.is-cat .name { color: var(--ok); }
   .top3 li.empty { color: #bbb; justify-content: center; box-shadow: none; background: transparent; }
@@ -102,7 +101,7 @@
 </head>
 <body>
   <h1>來畫一隻貓吧！</h1>
-  <p class="hint"><br>如果系統判定你的作品為「貓」（相似度前 3 名），即可解鎖隱藏獎勵！<br><br></p>
+  <p class="hint"><br>如果系統判定你的作品為「貓」，即可解鎖隱藏獎勵！<br><br></p>
 
 
   <div class="stage">
@@ -141,9 +140,29 @@
   (function () {
     "use strict";
 
-    // 過關條件：cat 排進模型預測的前 TOP_N 名。改小 = 較嚴格，改大 = 較寬鬆。
-    const TOP_N = 3;
+    // 過關條件：cat 排進「候選清單」裡的前 TOP_N 名。改小 = 較嚴格，改大 = 較寬鬆。
+    const TOP_N = 1;
     const CAT_LABEL = "cat";
+
+    // 候選清單：只跟這些比名次，排除其餘類別的干擾。項目越多越難，依喜好增減。
+    // 都挑常見、好認的具象東西，避開形狀／地景／身體部位／抽象類。
+    const CANDIDATES = new Set([
+      // 🐾 動物（40）
+      "cat","dog","rabbit","tiger","lion","bear","mouse","pig","cow","horse",
+      "duck","frog","owl","penguin","elephant","monkey","sheep","bird","snake","fish",
+      "crab","snail","butterfly","bee","spider","shark","dolphin","whale","octopus","giraffe",
+      "zebra","panda","kangaroo","camel","squirrel","swan","parrot","crocodile","sea_turtle","dragon",
+      // 🍎 食物（20）
+      "apple","banana","pizza","donut","ice_cream","cake","hamburger","cookie","bread","carrot",
+      "strawberry","watermelon","pineapple","grapes","pear","mushroom","hot_dog","sandwich","lollipop","popsicle",
+      // 🚗 交通工具（10）
+      "car","bus","truck","train","airplane","helicopter","bicycle","sailboat","motorbike","ambulance",
+      // 🏠 常見物品（20）
+      "house","chair","cup","book","key","scissors","umbrella","hat","shoe","t-shirt",
+      "clock","light_bulb","candle","television","door","table","bed","fork","spoon","knife",
+      // 🌳 自然（10）
+      "tree","flower","sun","star","cloud","moon","rainbow","snowflake","cactus","snowman",
+    ]);
 
     const canvas = document.getElementById("pad");
     const ctx = canvas.getContext("2d");
@@ -154,8 +173,6 @@
     const reward = document.getElementById("reward");
 
     let unlocked = false;        // cat 曾進前 TOP_N 名即永久解鎖，不再收回
-    let bestRank = 999;
-    let bestConf = 0;
 
     function paintWhite() {
       ctx.fillStyle = "#fff";
@@ -196,8 +213,6 @@
       paintWhite();
       hasDrawn = false;
       unlocked = false;
-      bestRank = 999;
-      bestConf = 0;
       claimBtn.style.display = "none";
       renderTop3(null);
       statusEl.textContent = modelReady ? "重新畫一隻貓吧～" : "正在載入辨識模型…";
@@ -212,11 +227,6 @@
       canvas.classList.remove("locked");
       statusEl.textContent = "模型已就緒，開始畫一隻貓吧！";
     });
-
-    function readCatProb(results) {
-      const hit = results.find(r => r.label.toLowerCase().includes(CAT_LABEL));
-      return hit ? hit.confidence : 0;
-    }
 
     // 345 類標籤的中文對照（key 用模型回傳的小寫底線格式；沒對到則顯示原文）
     const ZH = {
@@ -300,7 +310,6 @@
         return `<li class="${isCat ? 'is-cat' : ''}">
           <span class="rank">${i + 1}.</span>
           <span class="name">${isCat ? '🐱 ' : ''}${zh(r.label)}</span>
-          <span class="conf">${Math.round(r.confidence * 100)}%</span>
         </li>`;
       }).join("");
     }
@@ -310,24 +319,22 @@
       // 官方驗證的做法：直接送原始白底黑線畫布，ml5 內部會自行反相＋縮到 28×28。
       classifier.classify(canvas, 345, (err, results) => {
         if (err) { console.error(err); statusEl.textContent = "辨識發生錯誤，請看 console。"; return; }
-        const catProb = readCatProb(results);
-        const idx = results.findIndex(r => r.label.toLowerCase().includes(CAT_LABEL));
+        // 只保留候選清單，並維持原本信心值排序；名次在這個子集合裡算
+        const filtered = results.filter(r => CANDIDATES.has(r.label.toLowerCase()));
+        const idx = filtered.findIndex(r => r.label.toLowerCase() === CAT_LABEL);
         const rank = idx === -1 ? 999 : idx + 1;
-        onDone({ catProb, rank, results });
+        onDone({ rank, results: filtered });
       });
     }
 
     // 放開滑鼠後才辨識一次
     function liveCheck() {
       if (!classifier || !hasDrawn) return;
-      classifyNow(({ catProb, rank, results }) => {
+      classifyNow(({ rank, results }) => {
         renderTop3(results);
-
-        if (rank < bestRank) { bestRank = rank; }
 
         if (rank <= TOP_N && !unlocked) {
           unlocked = true;
-          bestConf = catProb;
           claimBtn.style.display = "";
           statusEl.textContent = `🎉 達成！貓衝進第 ${rank} 名，按「🎁 領取獎品」！`;
         } else if (unlocked) {
