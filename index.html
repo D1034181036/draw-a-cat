@@ -179,7 +179,9 @@
         y: (p.clientY - rect.top) * (canvas.height / rect.height),
       };
     }
-    function start(e) { e.preventDefault(); if (!modelReady) return; drawing = true; hasDrawn = true; const {x,y}=getPos(e); ctx.beginPath(); ctx.moveTo(x,y); }
+    function start(e) { e.preventDefault(); if (!modelReady) return; drawing = true; hasDrawn = true; const {x,y}=getPos(e);
+      ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(x, y, ctx.lineWidth/2, 0, Math.PI*2); ctx.fill();  // 點一下也要畫出一個點
+      ctx.beginPath(); ctx.moveTo(x,y); }
     function move(e)  { if(!drawing) return; e.preventDefault(); const {x,y}=getPos(e); ctx.lineTo(x,y); ctx.stroke(); }
     function end()    { if (!drawing) return; drawing = false; liveCheck(); }  // 放開滑鼠才判定
 
