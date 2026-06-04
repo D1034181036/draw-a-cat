@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>畫一隻貓 🐱</title>
+<style>
+  :root {
+    --bg: #f5f1e8;
+    --ink: #2b2b2b;
+    --accent: #ff7a59;
+    --ok: #2ecc71;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  .hint { font-size: 0.85rem; color: #888; margin: 0 0 12px; text-align: center; }
+
+  .stage {
+    position: relative;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    padding: 12px;
+  }
+  canvas {
+    display: block;
+    border-radius: 10px;
+    background: #fff;
+    border: 2px dashed #d8d2c4;
+    touch-action: none;        /* 防止觸控時頁面捲動 */
+    cursor: crosshair;
+  }
+
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
+  button {
+    font-size: 0.95rem;
+    padding: 9px 16px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: #fff;
+    color: var(--ink);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: transform .08s ease;
+  }
+  button:active { transform: scale(0.96); }
+  button.primary { background: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* 領獎按鈕：解鎖時跳出來吸引注意 */
+  button.claim { background: var(--ok); color: #fff; animation: pop .4s ease; margin-top: 14px; }
+  @keyframes pop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+
+  /* 即時前五名 */
+  .top3-wrap { width: 280px; max-width: 100%; margin-top: 16px; }
+  .top3-title { font-size: 0.8rem; color: #999; margin-bottom: 6px; }
+  .top3 { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .top3 li {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border-radius: 8px; padding: 7px 10px;
+    font-size: 0.9rem; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .top3 li .rank { font-weight: 700; color: #bbb; width: 1.2em; }
+  .top3 li .name { flex: 1; }
+  .top3 li .conf { color: #aaa; font-size: 0.8rem; }
+  .top3 li.is-cat { background: #eafaf0; box-shadow: 0 1px 4px rgba(46,204,113,0.25); }
+  .top3 li.is-cat .rank, .top3 li.is-cat .name { color: var(--ok); }
+  .top3 li.empty { color: #bbb; justify-content: center; box-shadow: none; background: transparent; }
+
+  .status { margin-top: 10px; font-size: 0.9rem; min-height: 1.2em; text-align: center; color: #777; }
+
+  /* 獎勵彈窗 */
+  .reward {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 10; padding: 20px;
+  }
+  .reward.show { display: flex; animation: fade .3s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .reward-card {
+    background: #fff; border-radius: 18px; padding: 22px;
+    text-align: center; max-width: 360px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .reward-card h2 { margin: 0 0 12px; color: var(--ok); }
+  .reward-card img { max-width: 100%; border-radius: 12px; }
+</style>
+</head>
+<body>
+  <h1>畫一隻貓 🐱</h1>
+  <p class="hint"><br>畫到讓 AI 把「貓」認成<b>最像的前 3 名</b>，就能解鎖隱藏獎勵！<br><br></p>
+
+
+  <div class="stage">
+    <canvas id="pad" width="280" height="280"></canvas>
+    <div class="toolbar">
+      <button id="clearBtn">🗑️ 清除重畫</button>
+    </div>
+  </div>
+
+  <!-- 領取獎品：畫布下方，達標時才出現 -->
+  <button id="claimBtn" class="primary claim" style="display:none">🎁 領取獎品</button>
+
+  <!-- 即時前五名 -->
+  <div class="top3-wrap">
+    <div class="top3-title">AI 目前覺得你畫的最像…</div>
+    <ol class="top3" id="top3"><li class="empty"></li></ol>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <!-- 獎勵彈窗 -->
+  <div class="reward" id="reward">
+    <div class="reward-card">
+      <h2>🎉 過關！</h2>
+      <p>這是我家的貓咪，他叫牛牛，很可愛吧。</p>
+      <img id="rewardImg" src="image.jpg">
+      <div class="toolbar">
+        <button onclick="document.getElementById('reward').classList.remove('show')">再畫一隻</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ml5.js：封裝 TensorFlow.js，內建 DoodleNet（Google QuickDraw 345 類手繪塗鴉模型） -->
+  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+  <script>
+  (function () {
+    "use strict";
+
+    // 過關條件：cat 排進模型預測的前 TOP_N 名。改小 = 較嚴格，改大 = 較寬鬆。
+    const TOP_N = 3;
+    const CAT_LABEL = "cat";
+
+    const canvas = document.getElementById("pad");
+    const ctx = canvas.getContext("2d");
+    const clearBtn = document.getElementById("clearBtn");
+    const claimBtn = document.getElementById("claimBtn");
+    const top3El = document.getElementById("top3");
+    const statusEl = document.getElementById("status");
+    const reward = document.getElementById("reward");
+
+    let unlocked = false;        // cat 曾進前 TOP_N 名即永久解鎖，不再收回
+    let bestRank = 999;
+    let bestConf = 0;
+
+    function paintWhite() {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    paintWhite();
+
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 9;          // 太細的線縮到 28×28 後會消失，9 較穩
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // ---------- 繪圖（滑鼠 + 觸控） ----------
+    let drawing = false, hasDrawn = false;
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const p = e.touches ? e.touches[0] : e;
+      return {
+        x: (p.clientX - rect.left) * (canvas.width / rect.width),
+        y: (p.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+    function start(e) { e.preventDefault(); drawing = true; hasDrawn = true; const {x,y}=getPos(e); ctx.beginPath(); ctx.moveTo(x,y); }
+    function move(e)  { if(!drawing) return; e.preventDefault(); const {x,y}=getPos(e); ctx.lineTo(x,y); ctx.stroke(); }
+    function end()    { if (!drawing) return; drawing = false; liveCheck(); }  // 放開滑鼠才判定
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    canvas.addEventListener("touchstart", start, { passive: false });
+    canvas.addEventListener("touchmove", move, { passive: false });
+    canvas.addEventListener("touchend", end);
+
+    clearBtn.addEventListener("click", () => {
+      paintWhite();
+      hasDrawn = false;
+      unlocked = false;
+      bestRank = 999;
+      bestConf = 0;
+      claimBtn.style.display = "none";
+      renderTop3(null);
+      statusEl.textContent = modelReady ? "重新畫一隻貓吧～" : "正在載入辨識模型…";
+    });
+
+    // 載入 DoodleNet（ml5 內建，QuickDraw 345 類手繪塗鴉分類器）
+    let classifier = null, modelReady = false;
+    statusEl.textContent = "正在載入辨識模型…";
+    classifier = ml5.imageClassifier("DoodleNet", () => {
+      modelReady = true;
+      statusEl.textContent = "模型已就緒，開始畫一隻貓吧！";
+    });
+
+    function readCatProb(results) {
+      const hit = results.find(r => r.label.toLowerCase().includes(CAT_LABEL));
+      return hit ? hit.confidence : 0;
+    }
+
+    // 345 類標籤的中文對照（key 用模型回傳的小寫底線格式；沒對到則顯示原文）
+    const ZH = {
+      flashlight:"手電筒", belt:"皮帶", mushroom:"蘑菇", pond:"池塘", strawberry:"草莓",
+      pineapple:"鳳梨", sun:"太陽", cow:"牛", ear:"耳朵", bush:"灌木叢", pliers:"鉗子",
+      watermelon:"西瓜", apple:"蘋果", baseball:"棒球", feather:"羽毛", shoe:"鞋子",
+      leaf:"葉子", lollipop:"棒棒糖", crown:"皇冠", ocean:"海洋", horse:"馬", mountain:"山",
+      mosquito:"蚊子", mug:"馬克杯", hospital:"醫院", saw:"鋸子", castle:"城堡", angel:"天使",
+      underwear:"內衣褲", traffic_light:"紅綠燈", cruise_ship:"郵輪", marker:"麥克筆",
+      blueberry:"藍莓", flamingo:"紅鶴", face:"臉", hockey_stick:"曲棍球桿", bucket:"水桶",
+      campfire:"營火", asparagus:"蘆筍", skateboard:"滑板", door:"門", suitcase:"行李箱",
+      skull:"骷髏", cloud:"雲", paint_can:"油漆桶", hockey_puck:"曲棍球", steak:"牛排",
+      house_plant:"盆栽", sleeping_bag:"睡袋", bench:"長椅", snowman:"雪人", arm:"手臂",
+      crayon:"蠟筆", fan:"扇子", shovel:"鏟子", leg:"腿", washing_machine:"洗衣機", harp:"豎琴",
+      toothbrush:"牙刷", tree:"樹", bear:"熊", rake:"耙子", megaphone:"擴音器", knee:"膝蓋",
+      guitar:"吉他", calculator:"計算機", hurricane:"颶風", grapes:"葡萄", paintbrush:"水彩筆",
+      couch:"沙發", nose:"鼻子", square:"正方形", wristwatch:"手錶", penguin:"企鵝",
+      bridge:"橋", octagon:"八邊形", submarine:"潛水艇", screwdriver:"螺絲起子",
+      rollerskates:"輪鞋", ladder:"梯子", wine_bottle:"酒瓶", cake:"蛋糕", bracelet:"手環",
+      broom:"掃把", yoga:"瑜珈", finger:"手指", fish:"魚", line:"直線", truck:"卡車",
+      snake:"蛇", bus:"公車", stitches:"縫線", snorkel:"浮潛呼吸管", shorts:"短褲",
+      bowtie:"領結", pickup_truck:"小貨卡", tooth:"牙齒", snail:"蝸牛", foot:"腳", crab:"螃蟹",
+      school_bus:"校車", train:"火車", dresser:"抽屜櫃", sock:"襪子", tractor:"曳引機",
+      map:"地圖", hedgehog:"刺蝟", coffee_cup:"咖啡杯", computer:"電腦", matches:"火柴",
+      beard:"鬍鬚", frog:"青蛙", crocodile:"鱷魚", bathtub:"浴缸", rain:"雨", moon:"月亮",
+      bee:"蜜蜂", knife:"刀子", boomerang:"迴力鏢", lighthouse:"燈塔", chandelier:"吊燈",
+      jail:"監獄", pool:"泳池", stethoscope:"聽診器", frying_pan:"平底鍋", cell_phone:"手機",
+      binoculars:"望遠鏡", purse:"手提包", lantern:"燈籠", birthday_cake:"生日蛋糕",
+      clarinet:"豎笛", palm_tree:"棕櫚樹", aircraft_carrier:"航空母艦", vase:"花瓶",
+      eraser:"橡皮擦", shark:"鯊魚", skyscraper:"摩天大樓", bicycle:"腳踏車", sink:"水槽",
+      teapot:"茶壺", circle:"圓形", tornado:"龍捲風", bird:"鳥", stereo:"音響", mouth:"嘴巴",
+      key:"鑰匙", hot_dog:"熱狗", spoon:"湯匙", laptop:"筆電", cup:"杯子", bottlecap:"瓶蓋",
+      the_great_wall_of_china:"萬里長城", the_mona_lisa:"蒙娜麗莎", smiley_face:"笑臉",
+      waterslide:"滑水道", eyeglasses:"眼鏡", ceiling_fan:"吊扇", lobster:"龍蝦",
+      moustache:"鬍子", carrot:"紅蘿蔔", garden:"花園", police_car:"警車", postcard:"明信片",
+      necklace:"項鍊", helmet:"安全帽", blackberry:"黑莓", beach:"海灘", golf_club:"高爾夫球桿",
+      car:"汽車", panda:"熊貓", alarm_clock:"鬧鐘", "t-shirt":"T恤", dog:"狗", bread:"麵包",
+      wine_glass:"酒杯", lighter:"打火機", flower:"花", bandage:"OK繃", drill:"電鑽",
+      butterfly:"蝴蝶", swan:"天鵝", owl:"貓頭鷹", raccoon:"浣熊", squiggle:"波浪線",
+      calendar:"月曆", giraffe:"長頸鹿", elephant:"大象", trumpet:"小號", rabbit:"兔子",
+      trombone:"伸縮喇叭", sheep:"綿羊", onion:"洋蔥", church:"教堂", flip_flops:"夾腳拖",
+      spreadsheet:"試算表", pear:"梨子", clock:"時鐘", roller_coaster:"雲霄飛車",
+      parachute:"降落傘", kangaroo:"袋鼠", duck:"鴨子", remote_control:"遙控器", compass:"指南針",
+      monkey:"猴子", rainbow:"彩虹", tennis_racquet:"網球拍", lion:"獅子", pencil:"鉛筆",
+      string_bean:"四季豆", oven:"烤箱", star:"星星", cat:"貓", pizza:"披薩", soccer_ball:"足球",
+      syringe:"針筒", flying_saucer:"飛碟", eye:"眼睛", cookie:"餅乾", floor_lamp:"立燈",
+      mouse:"老鼠", toilet:"馬桶", toaster:"烤麵包機", the_eiffel_tower:"艾菲爾鐵塔",
+      airplane:"飛機", stove:"爐子", cello:"大提琴", stop_sign:"停止標誌", tent:"帳篷",
+      diving_board:"跳水板", light_bulb:"燈泡", hammer:"鎚子", scorpion:"蠍子",
+      headphones:"耳機", basket:"籃子", spider:"蜘蛛", paper_clip:"迴紋針", sweater:"毛衣",
+      ice_cream:"冰淇淋", envelope:"信封", sea_turtle:"海龜", donut:"甜甜圈", hat:"帽子",
+      hourglass:"沙漏", broccoli:"花椰菜", jacket:"外套", backpack:"後背包", book:"書",
+      lightning:"閃電", drums:"鼓", snowflake:"雪花", radio:"收音機", banana:"香蕉",
+      camel:"駱駝", canoe:"獨木舟", toothpaste:"牙膏", chair:"椅子", picture_frame:"相框",
+      parrot:"鸚鵡", sandwich:"三明治", lipstick:"口紅", pants:"褲子", violin:"小提琴",
+      brain:"大腦", power_outlet:"插座", triangle:"三角形", hamburger:"漢堡", dragon:"龍",
+      bulldozer:"推土機", cannon:"大砲", dolphin:"海豚", zebra:"斑馬", animal_migration:"動物",
+      camouflage:"迷彩", scissors:"剪刀", basketball:"籃球", elbow:"手肘", umbrella:"雨傘",
+      windmill:"風車", table:"桌子", rifle:"步槍", hexagon:"六邊形", potato:"馬鈴薯", anvil:"鐵砧",
+      sword:"劍", peanut:"花生", axe:"斧頭", television:"電視", rhinoceros:"犀牛",
+      baseball_bat:"棒球棒", speedboat:"快艇", sailboat:"帆船", zigzag:"鋸齒線",
+      garden_hose:"澆花水管", river:"河流", house:"房子", pillow:"枕頭", ant:"螞蟻", tiger:"老虎",
+      stairs:"樓梯", cooler:"保冷箱", see_saw:"翹翹板", piano:"鋼琴", fireplace:"壁爐",
+      popsicle:"冰棒", dumbbell:"啞鈴", mailbox:"信箱", barn:"穀倉", hot_tub:"按摩浴缸",
+      "teddy-bear":"泰迪熊", fork:"叉子", dishwasher:"洗碗機", peas:"豌豆",
+      hot_air_balloon:"熱氣球", keyboard:"鍵盤", microwave:"微波爐", wheel:"輪子",
+      fire_hydrant:"消防栓", van:"廂型車", camera:"相機", whale:"鯨魚", candle:"蠟燭",
+      octopus:"章魚", pig:"豬", swing_set:"鞦韆", helicopter:"直升機", saxophone:"薩克斯風",
+      passport:"護照", bat:"蝙蝠", ambulance:"救護車", diamond:"鑽石", goatee:"山羊鬍",
+      fence:"柵欄", grass:"草", mermaid:"美人魚", motorbike:"機車", microphone:"麥克風",
+      toe:"腳趾", cactus:"仙人掌", nail:"釘子", telephone:"電話", hand:"手", squirrel:"松鼠",
+      streetlight:"路燈", bed:"床", firetruck:"消防車",
+    };
+    const zh = (label) => ZH[label.toLowerCase()] || label;
+
+    // 渲染前五名；results=null 代表清空
+    function renderTop3(results) {
+      if (!results) { top3El.innerHTML = '<li class="empty"></li>'; return; }
+      top3El.innerHTML = results.slice(0, 5).map((r, i) => {
+        const isCat = r.label.toLowerCase().includes(CAT_LABEL);
+        return `<li class="${isCat ? 'is-cat' : ''}">
+          <span class="rank">${i + 1}.</span>
+          <span class="name">${isCat ? '🐱 ' : ''}${zh(r.label)}</span>
+          <span class="conf">${Math.round(r.confidence * 100)}%</span>
+        </li>`;
+      }).join("");
+    }
+
+    function classifyNow(onDone) {
+      if (!classifier) return;
+      // 官方驗證的做法：直接送原始白底黑線畫布，ml5 內部會自行反相＋縮到 28×28。
+      classifier.classify(canvas, 345, (err, results) => {
+        if (err) { console.error(err); statusEl.textContent = "辨識發生錯誤，請看 console。"; return; }
+        const catProb = readCatProb(results);
+        const idx = results.findIndex(r => r.label.toLowerCase().includes(CAT_LABEL));
+        const rank = idx === -1 ? 999 : idx + 1;
+        onDone({ catProb, rank, results });
+      });
+    }
+
+    // 放開滑鼠後才辨識一次
+    function liveCheck() {
+      if (!classifier || !hasDrawn) return;
+      classifyNow(({ catProb, rank, results }) => {
+        renderTop3(results);
+
+        if (rank < bestRank) { bestRank = rank; }
+
+        if (rank <= TOP_N && !unlocked) {
+          unlocked = true;
+          bestConf = catProb;
+          claimBtn.style.display = "";
+          statusEl.textContent = `🎉 達成！貓衝進第 ${rank} 名，按「🎁 領取獎品」！`;
+        } else if (unlocked) {
+          statusEl.textContent = "已解鎖獎品 🎁";
+        } else {
+          statusEl.textContent = rank <= 10
+            ? `快了！貓目前第 ${rank} 名！`
+            : "繼續畫，讓它更像一隻貓～";
+        }
+      });
+    }
+
+    // ---------- 領取獎品 ----------
+    claimBtn.addEventListener("click", () => {
+      reward.classList.add("show");
+    });
+  })();
+  </script>
+</body>
+</html>
