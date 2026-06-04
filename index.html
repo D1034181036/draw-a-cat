@@ -41,6 +41,8 @@
     touch-action: none;        /* 防止觸控時頁面捲動 */
     cursor: crosshair;
   }
+  /* 模型載入完成前禁止畫圖 */
+  canvas.locked { cursor: wait; opacity: 0.6; }
 
   .toolbar { display: flex; gap: 8px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
   button {
@@ -177,7 +179,7 @@
         y: (p.clientY - rect.top) * (canvas.height / rect.height),
       };
     }
-    function start(e) { e.preventDefault(); drawing = true; hasDrawn = true; const {x,y}=getPos(e); ctx.beginPath(); ctx.moveTo(x,y); }
+    function start(e) { e.preventDefault(); if (!modelReady) return; drawing = true; hasDrawn = true; const {x,y}=getPos(e); ctx.beginPath(); ctx.moveTo(x,y); }
     function move(e)  { if(!drawing) return; e.preventDefault(); const {x,y}=getPos(e); ctx.lineTo(x,y); ctx.stroke(); }
     function end()    { if (!drawing) return; drawing = false; liveCheck(); }  // 放開滑鼠才判定
 
@@ -202,8 +204,10 @@
     // 載入 DoodleNet（ml5 內建，QuickDraw 345 類手繪塗鴉分類器）
     let classifier = null, modelReady = false;
     statusEl.textContent = "正在載入辨識模型…";
+    canvas.classList.add("locked");
     classifier = ml5.imageClassifier("DoodleNet", () => {
       modelReady = true;
+      canvas.classList.remove("locked");
       statusEl.textContent = "模型已就緒，開始畫一隻貓吧！";
     });
 
