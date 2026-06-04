@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>畫一隻貓 🐱</title>
+<title>來畫一隻貓吧！</title>
 <style>
   :root {
     --bg: #f5f1e8;
@@ -99,8 +99,8 @@
 </style>
 </head>
 <body>
-  <h1>畫一隻貓 🐱</h1>
-  <p class="hint"><br>畫到讓 AI 把「貓」認成<b>最像的前 3 名</b>，就能解鎖隱藏獎勵！<br><br></p>
+  <h1>來畫一隻貓吧！</h1>
+  <p class="hint"><br>如果系統判定你的作品為「貓」（相似度前 3 名），即可解鎖隱藏獎勵！<br><br></p>
 
 
   <div class="stage">
@@ -115,7 +115,7 @@
 
   <!-- 即時前五名 -->
   <div class="top3-wrap">
-    <div class="top3-title">AI 目前覺得你畫的最像…</div>
+    <div class="top3-title">系統認為你畫的是...</div>
     <ol class="top3" id="top3"><li class="empty"></li></ol>
   </div>
 
@@ -128,7 +128,7 @@
       <p>這是我家的貓咪，他叫牛牛，很可愛吧。</p>
       <img id="rewardImg" src="image.jpg">
       <div class="toolbar">
-        <button onclick="document.getElementById('reward').classList.remove('show')">再畫一隻</button>
+        <button onclick="document.getElementById('reward').classList.remove('show')">完成</button>
       </div>
     </div>
   </div>
