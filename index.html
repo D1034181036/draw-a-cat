@@ -61,6 +61,11 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   /* 領獎按鈕：解鎖時跳出來吸引注意 */
   button.claim { background: var(--ok); color: #fff; animation: pop .4s ease; margin-top: 14px; }
+
+  /* 難度切換（分段按鈕） */
+  .diff { display: inline-flex; margin: 0 0 14px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .diff-btn { box-shadow: none; border-radius: 0; background: #fff; }
+  .diff-btn.active { background: var(--accent); color: #fff; }
   @keyframes pop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
 
   /* 即時前五名 */
@@ -103,6 +108,11 @@
   <h1>來畫一隻貓吧！</h1>
   <p class="hint"><br>如果系統判定你的作品為「貓」，即可解鎖隱藏獎勵！<br><br></p>
 
+  <!-- 難度切換：簡單版＝只比候選清單；正常版＝全部 345 類 -->
+  <div class="diff" id="diff">
+    <button type="button" class="diff-btn active" data-mode="easy">🟢 簡單</button>
+    <button type="button" class="diff-btn" data-mode="normal">🟡 普通</button>
+  </div>
 
   <div class="stage">
     <canvas id="pad" width="280" height="280"></canvas>
@@ -171,8 +181,49 @@
     const top3El = document.getElementById("top3");
     const statusEl = document.getElementById("status");
     const reward = document.getElementById("reward");
+    const diffEl = document.getElementById("diff");
 
     let unlocked = false;        // cat 曾進前 TOP_N 名即永久解鎖，不再收回
+    let useCandidates = true;    // true = 簡單版（只比候選清單）；false = 正常版（全部 345 類）
+
+    // 兩個模式各自獨立保存：畫布內容、是否畫過、解鎖狀態、前五名與狀態列文字
+    const modeState = {
+      easy:   { img: null, hasDrawn: false, unlocked: false, top3: "", status: "" },
+      normal: { img: null, hasDrawn: false, unlocked: false, top3: "", status: "" },
+    };
+
+    // 把目前模式的畫面與狀態存回 modeState
+    function snapshotMode(mode) {
+      const m = modeState[mode];
+      m.img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      m.hasDrawn = hasDrawn;
+      m.unlocked = unlocked;
+      m.top3 = top3El.innerHTML;
+      m.status = statusEl.textContent;
+    }
+
+    // 還原目標模式之前存下的畫面與狀態（沒有畫過就給空白畫布）
+    function restoreMode(mode) {
+      const m = modeState[mode];
+      if (m.img) ctx.putImageData(m.img, 0, 0); else paintWhite();
+      hasDrawn = m.hasDrawn;
+      unlocked = m.unlocked;
+      top3El.innerHTML = m.top3 || '<li class="empty"></li>';
+      statusEl.textContent = m.status || (modelReady ? "" : "讀取中…");
+      claimBtn.style.display = m.unlocked ? "" : "none";
+    }
+
+    // 難度切換：兩版分開畫，切換時先存目前的、再還原目標模式的
+    diffEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".diff-btn");
+      if (!btn) return;
+      const toEasy = btn.dataset.mode === "easy";
+      if (toEasy === useCandidates) return;           // 同一模式，不動作
+      snapshotMode(useCandidates ? "easy" : "normal");
+      useCandidates = toEasy;
+      diffEl.querySelectorAll(".diff-btn").forEach(b => b.classList.toggle("active", b === btn));
+      restoreMode(useCandidates ? "easy" : "normal");
+    });
 
     function paintWhite() {
       ctx.fillStyle = "#fff";
@@ -215,17 +266,18 @@
       unlocked = false;
       claimBtn.style.display = "none";
       renderTop3(null);
-      statusEl.textContent = modelReady ? "重新畫一隻貓吧～" : "正在載入辨識模型…";
+      statusEl.textContent = modelReady ? "" : "讀取中…";
     });
 
     // 載入 DoodleNet（ml5 內建，QuickDraw 345 類手繪塗鴉分類器）
     let classifier = null, modelReady = false;
-    statusEl.textContent = "正在載入辨識模型…";
+    statusEl.textContent = "讀取中…";
     canvas.classList.add("locked");
     classifier = ml5.imageClassifier("DoodleNet", () => {
       modelReady = true;
       canvas.classList.remove("locked");
-      statusEl.textContent = "模型已就緒，開始畫一隻貓吧！";
+      // 就緒後不顯示問候語；閒置時狀態列留空，動筆後才顯示名次／提示
+      statusEl.textContent = "";
     });
 
     // 345 類標籤的中文對照（key 用模型回傳的小寫底線格式；沒對到則顯示原文）
@@ -319,8 +371,10 @@
       // 官方驗證的做法：直接送原始白底黑線畫布，ml5 內部會自行反相＋縮到 28×28。
       classifier.classify(canvas, 345, (err, results) => {
         if (err) { console.error(err); statusEl.textContent = "辨識發生錯誤，請看 console。"; return; }
-        // 只保留候選清單，並維持原本信心值排序；名次在這個子集合裡算
-        const filtered = results.filter(r => CANDIDATES.has(r.label.toLowerCase()));
+        // 簡單版：只保留候選清單（名次在子集合裡算）；正常版：用全部 345 類
+        const filtered = useCandidates
+          ? results.filter(r => CANDIDATES.has(r.label.toLowerCase()))
+          : results;
         const idx = filtered.findIndex(r => r.label.toLowerCase() === CAT_LABEL);
         const rank = idx === -1 ? 999 : idx + 1;
         onDone({ rank, results: filtered });
